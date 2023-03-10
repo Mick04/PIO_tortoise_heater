@@ -11,10 +11,12 @@
 #include <ESP8266WebServer.h>
 #include <Adafruit_Sensor.h>
 #include <OneWire.h>
+#include <RTCVars.h>
 #include "LittleFS.h"
 
 #define Relay_Pin D5 // active board
 #define LED_Pin 13   // on board LED_Pin
+
 // #define LED_Pin D6//LED_Pin  //change when debuged
 OneWire ds(D7); // active board  // on pin 10 (a 4.7K resistor is necessary)
 
@@ -504,15 +506,13 @@ void setup()
  ************************************/
 void loop()
 {
+
   ArduinoOTA.handle();
   // delay(1000);
   if (!client.connected())
   {
     reconnect();
   }
-  sendSensor();
-  client.loop();
-  Serial.print("hi i'm here");
   timeClient.update();
   Day = timeClient.getDay();
   Hours = timeClient.getHours();
@@ -525,4 +525,13 @@ void loop()
     Am = false;
     AmType[1] = 'N';
   }
+  Serial.print("targetTemp = ");
+  Serial.println(targetTemp);
+  Serial.print("DayHighTemp = ");
+  Serial.println(DayHighTemp);
+  Serial.print(Hours);
+  Serial.print(" : ");
+  Serial.println(Minutes);
+  sendSensor();
+  client.loop();
 }
