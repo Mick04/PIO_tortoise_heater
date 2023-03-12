@@ -11,14 +11,18 @@
 #include <ESP8266WebServer.h>
 #include <Adafruit_Sensor.h>
 #include <OneWire.h>
-#include <RTCVars.h>
 #include "LittleFS.h"
+
+void deleteFile(const char *path);
+void writeFile(const char *path, const char message);
+void appendFile(const char *path, const char message);
+void readFile(const char *path);
 
 #define Relay_Pin D5 // active board
 #define LED_Pin 13   // on board LED_Pin
 
-// #define LED_Pin D6//LED_Pin  //change when debuged
-OneWire ds(D7); // active board  // on pin 10 (a 4.7K resistor is necessary)
+    // #define LED_Pin D6//LED_Pin  //change when debuged
+    OneWire ds(D7); // active board  // on pin 10 (a 4.7K resistor is necessary)
 
 byte i;
 byte present = 0;
@@ -33,6 +37,8 @@ float sVal1;
 float sVal2;
 float sVal3;
 int adr;
+int reply;                  // reply from littleFS
+int count = 0;              // counts the reply's from littleFS
 int targetTemp;             // is set by DayHighTemp and NightHighTemp
 uint_fast8_t DayHighTemp;   // is set by the sliders
 uint_fast8_t NightHighTemp; // is set by the sliders
@@ -74,12 +80,12 @@ unsigned long lastMillis = 0;
 unsigned long previousMillis = 0;
 const long interval = 5000;
 /********************************************
-      settup the time variables end
+      settup the time variables end         *
  * ******************************************/
 // void readData(uint_fast8_t Day_Hours, uint_fast8_t Day_Minuts, uint_fast8_t DayHighTemp);
 // void writeData(int dayHours, int dayMinuts, int dayTemp);
 /********************************************
-      wifi and pubSup credentials start
+      wifi and pubSup credentials start     *
  * ******************************************/
 
 const char *ssid = "Gimp";
@@ -94,10 +100,10 @@ char msg[MSG_BUFFER_SIZE];
 long int value = 0;
 
 /********************************************
-      wifi and pubSup credentials end
+      wifi and pubSup credentials end       *
  * ******************************************/
 /********************************************
-  Static IP address and wifi conection Start
+  Static IP address and wifi conection Start*
 ********************************************/
 
 // Set your Static IP address
@@ -108,8 +114,8 @@ IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 0, 0);
 IPAddress primaryDNS(8, 8, 8, 8);   // optional
 IPAddress secondaryDNS(8, 8, 4, 4); // optional
-/********************************************
-     Static IP address and wifi conection end
+/*********************************************
+     Static IP address and wifi conection end*
  ********************************************/
 
 void setup_wifi()
@@ -132,14 +138,15 @@ void setup_wifi()
 }
 
 /********************************************
-         connect to the internet end
+         connect to the internet end        *
  * ******************************************/
 
 /********************************************
-                Callback start
+                Callback start              *
  * ******************************************/
 void callback(char *topic, byte *payload, unsigned int length)
 {
+
   for (unsigned int i = 0; i < length; i++)
   {
   }
@@ -159,6 +166,8 @@ void callback(char *topic, byte *payload, unsigned int length)
     if (strstr(topic, "day_h"))
     {
       sscanf((char *)payload, "%02d", &Day_Hours); // if topic = day_h then Day_Hours = payload
+      // Serial.print("** 161 ** Day_Hours = ");
+      Serial.println(Day_Hours);
     }
     if (strstr(topic, "day_m"))
     {
@@ -184,9 +193,20 @@ void callback(char *topic, byte *payload, unsigned int length)
       sscanf((char *)payload, "%02d", &NightHighTemp); // if topic = night_temp then night_temp = payload
     }
   }
+  deleteFile("/sliderData.txt");
+  writeFile("/sliderData.txt", Day_Hours);
+  appendFile("/sliderData.txt", Day_Minutes);
+  appendFile("/sliderData.txt", Day_Minutes);
+  appendFile("/sliderData.txt", Night_Hours);
+  appendFile("/sliderData.txt", Night_Minutes);
+  appendFile("/sliderData.txt", NightHighTemp);
 }
 /********************************************
-                Callback end
+                Callback end                *
+* ******************************************/
+
+/********************************************
+               RECONNECT START
 * ******************************************/
 
 void reconnect()
@@ -229,12 +249,16 @@ void reconnect()
 }
 
 /********************************************
-         send temperature value
-             to server for
-          temperature monitor
-                to receive
-                  start
+               RECONNECT END
 * ******************************************/
+
+/*********************************************
+ *         send temperature value             *
+ *             to server for                  *
+ *          temperature monitor               *
+ *                to receive                  *
+ *                  start                     *
+ * *******************************************/
 void convertor(void)
 {
   char sensVal[50];
@@ -500,10 +524,167 @@ void setup()
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  /************************************
+           OVER THE AIR END
+   ************************************/
+
+  /************************************
+          start littleFS start
+   ************************************/
+  Serial.println("Now mount it");
+  if (!LittleFS.begin())
+  {
+    Serial.println("LittleFS mount failed");
+    return;
+  }
+  delay(500);
+  readFile("/sliderData.txt");
+
+  /************************************
+        start littleFS END
+ ************************************/
+}
+
+/************************************
+        littleFS WRITE START
+************************************/
+void writeFile(const char *path, const char message)
+{
+  Serial.printf("** 59 ** Writing file: %s\n", path);
+
+  File file = LittleFS.open(path, "w");
+  if (!file)
+  {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if (file.print(message))
+  {
+    Serial.println("** 67 ** File written");
+  }
+  else
+  {
+    Serial.println("Write failed");
+  }
+  delay(2000); // Make sure the CREATE and LASTWRITE times are different
+  file.close();
 }
 /************************************
-         OVER THE AIR END
- ************************************/
+        littleFS WRITE END
+************************************/
+/************************************
+        littleFS APPEND START
+************************************/
+
+void appendFile(const char *path, const char message)
+{
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = LittleFS.open(path, "a");
+  if (!file)
+  {
+    Serial.println("** 80 ** Failed to open file for appending");
+    return;
+  }
+  if (file.print(message))
+  {
+    Serial.println("** 84 ** Message appended");
+  }
+  else
+  {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
+/************************************
+        littleFS APPEND END
+************************************/
+
+/************************************
+      littleFS readFile start
+************************************/
+void readFile(const char *path)
+{
+  Serial.printf("Reading file: %s\n", path);
+
+  File file = LittleFS.open(path, "r");
+  if (!file)
+  {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+
+  Serial.println("** 53 ** Read from file: ");
+  while (file.available())
+  {
+    reply = (file.read());
+    //    Serial.print("** 58 ** third = ");
+    //    Serial.println(reply);
+    if (count == 0)
+    {
+      Day_Hours = reply;
+      Serial.print("** 45 ** Day_Hours = ");
+      Serial.println(Day_Hours);
+    }
+    if (count == 1)
+    {
+      Day_Minutes = reply;
+      Serial.print("** 50 ** Day_Minutes = ");
+      Serial.println(Day_Minutes);
+    }
+    if (count == 2)
+    {
+      DayHighTemp = reply;
+      Serial.print("** 53 ** DayHighTemp = ");
+      Serial.println(DayHighTemp);
+    }
+    if (count == 3)
+    {
+      Night_Hours = reply;
+      Serial.print("** 60 ** Night_Hours = ");
+      Serial.println(Night_Hours);
+    }
+    if (count == 4)
+    {
+      Night_Minutes = reply;
+      Serial.print("** 60 ** Night_Minutes = ");
+      Serial.println(Night_Minutes);
+    }
+    if (count == 5)
+    {
+      NightHighTemp = reply + 1;
+      Serial.print("** 60 ** NightHighTemp = ");
+      Serial.println(NightHighTemp);
+    }
+    count++;
+  }
+  file.close();
+}
+/************************************
+        littleFS readFile END
+************************************/
+/************************************
+      littleFS deleteFile start
+************************************/
+
+void deleteFile(const char *path)
+{
+  Serial.printf("Deleting file: %s\n", path);
+  if (LittleFS.remove(path))
+  {
+    Serial.println("File deleted");
+  }
+  else
+  {
+    Serial.println("Delete failed");
+  }
+}
+/************************************
+       littleFS deleteFile END
+************************************/
+
 void loop()
 {
 
