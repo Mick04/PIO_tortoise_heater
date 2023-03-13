@@ -394,7 +394,6 @@ void sendSensor()
   { // we need to drop 8 bytes of data
   }
   adr = (addr[7]);
-
   if (OneWire::crc8(addr, 7) != addr[7])
   {
     Serial.println("CRC is not valid!");
