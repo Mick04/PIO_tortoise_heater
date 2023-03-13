@@ -12,11 +12,17 @@
 #include <Adafruit_Sensor.h>
 #include <OneWire.h>
 #include "LittleFS.h"
-
+/*********************
+ * prototypes start  *
+ **********************/
 void deleteFile(const char *path);
 void writeFile(const char *path, const char message);
 void appendFile(const char *path, const char message);
 void readFile(const char *path);
+void upDateData();
+/*********************
+ * prototypes start  *
+ **********************/
 
 #define Relay_Pin D5 // active board
 #define LED_Pin 13   // on board LED_Pin
@@ -39,6 +45,8 @@ float sVal3;
 int adr;
 int reply;                  // reply from littleFS
 int count = 0;              // counts the reply's from littleFS
+int dayTargetTemp;          // temporary storage foy targetTemp this is used if Am true
+int nightTtargetTemp;       // temporary storage foy targetTemp this is used if Am false
 int targetTemp;             // is set by DayHighTemp and NightHighTemp
 uint_fast8_t DayHighTemp;   // is set by the sliders
 uint_fast8_t NightHighTemp; // is set by the sliders
@@ -58,7 +66,7 @@ uint_fast8_t Night_seconds;
 uint_fast8_t temp;
 bool Am;
 bool Reset = false; // set when slider is moved
-bool StartUp = 0;
+bool reBoot = 1;
 bool Timer = 1;
 
 /********************************************
@@ -153,12 +161,15 @@ void callback(char *topic, byte *payload, unsigned int length)
 
   if ((char)payload[0] == 'N')
   {
+    Serial.print("********** N **********");
     Reset = true;
   }
 
   if ((char)payload[0] == 'F')
   {
+    Serial.print("********** F **********");
     Reset = false;
+    upDateData();
   }
 
   if (Reset == true)
@@ -193,13 +204,7 @@ void callback(char *topic, byte *payload, unsigned int length)
       sscanf((char *)payload, "%02d", &NightHighTemp); // if topic = night_temp then night_temp = payload
     }
   }
-  deleteFile("/sliderData.txt");
-  writeFile("/sliderData.txt", Day_Hours);
-  appendFile("/sliderData.txt", Day_Minutes);
-  appendFile("/sliderData.txt", Day_Minutes);
-  appendFile("/sliderData.txt", Night_Hours);
-  appendFile("/sliderData.txt", Night_Minutes);
-  appendFile("/sliderData.txt", NightHighTemp);
+
 }
 /********************************************
                 Callback end                *
@@ -211,6 +216,7 @@ void callback(char *topic, byte *payload, unsigned int length)
 
 void reconnect()
 {
+  Serial.print("** 221 ** reconnect ");
   // Loop until we're reconnected
   while (!client.connected())
   {
@@ -319,6 +325,7 @@ void relay_Control()
   {
     if (s1 < targetTemp)
     {
+      Serial1.print("** 458 ** Am");
       digitalWrite(Relay_Pin, HIGH);
       // digitalWrite (LED_Pin, HIGH);//LED_Pin on
       digitalWrite(LED_Pin, LOW); // builtin LED_Pin on
@@ -359,7 +366,24 @@ void sendSensor()
        DS18B20 Sensor
          Starts Here
   **************************/
-
+  Serial.print("** 732 ** REBOOT =  ");
+  Serial.print(reBoot);
+  if (reBoot == true)
+  {
+    if (Am)
+    {
+      targetTemp = dayTargetTemp;
+      Serial.print("** 379 ** Am = ");
+      Serial.print(Am);
+    }
+    if (!Am)
+    {
+      targetTemp = nightTtargetTemp;
+      Serial.print("** 385 ** Am = ");
+      Serial.print(Am);
+    }
+    reBoot = 0;
+  }
   if (!ds.search(addr))
   {
     ds.reset_search();
@@ -541,6 +565,24 @@ void setup()
   delay(500);
   readFile("/sliderData.txt");
 
+  Serial.print("** 547 ** targetTemp = ");
+  Serial.println(targetTemp);
+  Serial.print("** 549 ** dayTargetTemp = ");
+  Serial.println(dayTargetTemp);
+  Serial.print("** 551 ** nightTtargetTemp = ");
+  Serial.println(nightTtargetTemp);
+  Serial.print("** 553 ** Day_Hours = ");
+  Serial.println(Day_Hours);
+  Serial.print("** 555 ** Day_Minutes = ");
+  Serial.println(Day_Minutes);
+  Serial.print("** 557 ** DayHighTemp = ");
+  Serial.println(DayHighTemp);
+  Serial.print("** 559 ** Night_Hours = ");
+  Serial.println(Night_Hours);
+  Serial.print("** 561 ** Night_Minutes = ");
+  Serial.println(Night_Minutes);
+  Serial.print("** 563 ** NightHighTemp = ");
+  Serial.println(NightHighTemp);
   /************************************
         start littleFS END
  ************************************/
@@ -589,7 +631,8 @@ void appendFile(const char *path, const char message)
   }
   if (file.print(message))
   {
-    Serial.println("** 84 ** Message appended");
+    Serial.println("** 592 ** Message appended");
+    Serial.println(message);
   }
   else
   {
@@ -639,6 +682,7 @@ void readFile(const char *path)
       DayHighTemp = reply;
       Serial.print("** 53 ** DayHighTemp = ");
       Serial.println(DayHighTemp);
+      dayTargetTemp = DayHighTemp;
     }
     if (count == 3)
     {
@@ -654,9 +698,10 @@ void readFile(const char *path)
     }
     if (count == 5)
     {
-      NightHighTemp = reply + 1;
+      NightHighTemp = reply;
       Serial.print("** 60 ** NightHighTemp = ");
       Serial.println(NightHighTemp);
+      nightTtargetTemp = NightHighTemp;
     }
     count++;
   }
@@ -685,6 +730,15 @@ void deleteFile(const char *path)
        littleFS deleteFile END
 ************************************/
 
+void upDateData(){
+    deleteFile("/sliderData.txt");
+writeFile("/sliderData.txt", Day_Hours);
+appendFile("/sliderData.txt", Day_Minutes);
+appendFile("/sliderData.txt", DayHighTemp);
+appendFile("/sliderData.txt", Night_Hours);
+appendFile("/sliderData.txt", Night_Minutes);
+appendFile("/sliderData.txt", NightHighTemp);
+}
 void loop()
 {
 
@@ -706,10 +760,25 @@ void loop()
     Am = false;
     AmType[1] = 'N';
   }
-  Serial.print("targetTemp = ");
+
+  Serial.print("** 723 ** targetTemp = ");
   Serial.println(targetTemp);
-  Serial.print("DayHighTemp = ");
+  Serial.print("** 725 ** dayTargetTemp = ");
+  Serial.println(dayTargetTemp);
+  Serial.print("** 727 ** nightTtargetTemp = ");
+  Serial.println(nightTtargetTemp);
+  Serial.print("** 729 ** Day_Hours = ");
+  Serial.println(Day_Hours);
+  Serial.print("** 731 ** Day_Minutes = ");
+  Serial.println(Day_Minutes);
+  Serial.print("** 733 ** DayHighTemp = ");
   Serial.println(DayHighTemp);
+  Serial.print("** 735 ** Night_Hours = ");
+  Serial.println(Night_Hours);
+  Serial.print("** 737 ** Night_Minutes = ");
+  Serial.println(Night_Minutes);
+  Serial.print("** 739 ** NightHighTemp = ");
+  Serial.println(NightHighTemp);
   Serial.print(Hours);
   Serial.print(" : ");
   Serial.println(Minutes);
